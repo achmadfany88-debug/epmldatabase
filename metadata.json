@@ -1,0 +1,8 @@
+{
+  "name": "Sistem Data Terpadu EPML Provinsi Jawa Timur",
+  "description": "Master Data EPML KPw Bank Indonesia Provinsi Jawa Timur - Pencatatan, Pelacakan Real-Time, Geo-Tagging, dan Monitoring Penyaluran Bantuan Edukasi, Pemberdayaan Masyarakat, dan Lingkungan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
