@@ -1629,6 +1629,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               jadwalList={jadwals}
               bantuanList={bantuanList}
               mode="embedded"
+              canEdit={true}
+              actorName={currentUser.namaLengkap}
               showOnTopDashboard={landingConfig.tampilkanKalenderDiDashboardAtas !== false}
               onToggleShowOnTopDashboard={handleToggleShowKalenderOnTopDashboard}
               onSaveJadwal={handleSaveJadwal}

@@ -603,9 +603,21 @@ export const KalenderSurveiMonitoring: React.FC<KalenderSurveiMonitoringProps> =
               </div>
             </div>
 
-            {/* Action Button: Hanya Tampil di Dashboard */}
+            {/* Action Buttons: Tambah Jadwal (khusus menu navigasi Admin) & Tampil di Dashboard */}
             <div className="flex flex-wrap items-center gap-2">
-              {onToggleShowOnTopDashboard && (
+              {canEdit && onSaveJadwal && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateModal()}
+                  className="h-9 px-3.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                  title="Tambah Jadwal Survei Asesmen atau Monitoring Baru"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Tambah Jadwal</span>
+                </button>
+              )}
+
+              {canEdit && onToggleShowOnTopDashboard && (
                 <button
                   type="button"
                   onClick={() => onToggleShowOnTopDashboard(!showOnTopDashboard)}

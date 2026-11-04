@@ -356,15 +356,16 @@ export default function App() {
             jadwalList={jadwalKalender}
             bantuanList={bantuanList}
             mode="full_page"
+            canEdit={false}
             showOnTopDashboard={landingConfig.tampilkanKalenderDiDashboardAtas !== false}
-            onToggleShowOnTopDashboard={show => {
+            onToggleShowOnTopDashboard={currentUser ? show => {
               const updatedConfig: LandingPageConfig = {
                 ...landingConfig,
                 tampilkanKalenderDiDashboardAtas: show
               };
               StorageService.saveLandingConfig(updatedConfig, currentUser?.namaLengkap || 'Admin');
               setLandingConfig(updatedConfig);
-            }}
+            } : undefined}
             onSaveJadwal={item => {
               StorageService.saveJadwalKalender(
                 item,
