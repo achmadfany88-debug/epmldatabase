@@ -70,6 +70,23 @@ export class StorageService {
    * Initialize local database if not present
    */
   static initDatabase(): void {
+    const CLEAN_ZERO_INIT_KEY = 'bi_epml_v4_clean_zero_seeded';
+    if (!localStorage.getItem(CLEAN_ZERO_INIT_KEY)) {
+      localStorage.setItem(STORAGE_KEYS.BANTUAN, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.VENDORS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.ARTIKEL, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+      localStorage.setItem(STORAGE_KEYS.ANNUAL_PAGU, '0');
+      try {
+        const currentCfg = localStorage.getItem(STORAGE_KEYS.CONFIG);
+        const parsedCfg = currentCfg ? JSON.parse(currentCfg) : INITIAL_LANDING_CONFIG;
+        parsedCfg.totalPaguTahunan = 0;
+        localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(parsedCfg));
+      } catch {}
+      localStorage.setItem(CLEAN_ZERO_INIT_KEY, 'true');
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.BANTUAN)) {
       localStorage.setItem(STORAGE_KEYS.BANTUAN, JSON.stringify(INITIAL_BANTUAN));
     }
@@ -1070,7 +1087,7 @@ export class StorageService {
         totalPaguTahunan:
           typeof parsed.totalPaguTahunan === 'number'
             ? parsed.totalPaguTahunan
-            : INITIAL_LANDING_CONFIG.totalPaguTahunan ?? 46130000000
+            : INITIAL_LANDING_CONFIG.totalPaguTahunan ?? 0
       };
     } catch {
       return INITIAL_LANDING_CONFIG;
@@ -1085,7 +1102,7 @@ export class StorageService {
       toSave.heroVideoUrl = this.activeUploadedVideoObjectUrl;
     }
     localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(toSave));
-    if (toSave.totalPaguTahunan) {
+    if (typeof toSave.totalPaguTahunan === 'number') {
       localStorage.setItem(STORAGE_KEYS.ANNUAL_PAGU, String(toSave.totalPaguTahunan));
     }
     this.logAudit({
@@ -1104,18 +1121,18 @@ export class StorageService {
     this.initDatabase();
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.ANNUAL_PAGU);
-      if (saved) {
+      if (saved !== null && saved !== '') {
         const parsed = Number(saved);
-        if (!isNaN(parsed) && parsed > 0) return parsed;
+        if (!isNaN(parsed) && parsed >= 0) return parsed;
       }
       const config = this.getLandingConfig();
-      if (config.totalPaguTahunan && config.totalPaguTahunan > 0) {
+      if (typeof config.totalPaguTahunan === 'number' && config.totalPaguTahunan >= 0) {
         return config.totalPaguTahunan;
       }
     } catch {
       // fallback
     }
-    return 46130000000;
+    return 0;
   }
 
   static saveAnnualPagu(nominal: number, actor = 'Admin'): number {
@@ -1419,14 +1436,14 @@ export class StorageService {
     this.initDatabase();
     try {
       const data = localStorage.getItem(STORAGE_KEYS.JADWAL_KALENDER);
-      const saved: JadwalSurveiMonitoringItem[] = data ? JSON.parse(data) : INITIAL_JADWAL_KALENDER;
+      const saved: JadwalSurveiMonitoringItem[] = data ? JSON.parse(data) : [];
       // Also merge any recipient items that have tanggalJadwalMonitoring set and aren't yet in the calendar
       const bantuanList = this.getBantuanList();
       const existingBantuanIds = new Set(saved.map(j => j.bantuanId).filter(Boolean));
       const syncedFromBantuan: JadwalSurveiMonitoringItem[] = [];
 
       bantuanList.forEach(b => {
-        if (b.tanggalJadwalMonitoring && !existingBantuanIds.has(b.id)) {
+        if (b.tanggalJadwalMonitoring && b.tanggalJadwalMonitoring.trim() !== '' && !existingBantuanIds.has(b.id)) {
           syncedFromBantuan.push({
             id: `JDW-AUTO-${b.id}`,
             bantuanId: b.id,
@@ -1457,7 +1474,7 @@ export class StorageService {
       }
       return saved;
     } catch {
-      return INITIAL_JADWAL_KALENDER;
+      return [];
     }
   }
 
@@ -1515,9 +1532,35 @@ export class StorageService {
   }
 
   static deleteJadwalKalender(id: string, actor = 'Admin'): boolean {
-    const list = this.getJadwalKalender();
+    this.initDatabase();
+    let list: JadwalSurveiMonitoringItem[] = [];
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.JADWAL_KALENDER);
+      list = data ? JSON.parse(data) : [];
+    } catch {
+      list = [];
+    }
     const target = list.find(j => j.id === id);
-    const filtered = list.filter(j => j.id !== id);
+    const linkedBantuanId = target?.bantuanId || (id.startsWith('JDW-AUTO-') ? id.replace('JDW-AUTO-', '') : null);
+
+    // If linked to a BantuanItem, clear tanggalJadwalMonitoring so it is never recreated by auto-sync
+    if (linkedBantuanId) {
+      try {
+        const bList = this.getBantuanList();
+        const bIdx = bList.findIndex(b => b.id === linkedBantuanId);
+        if (bIdx >= 0 && bList[bIdx].tanggalJadwalMonitoring) {
+          bList[bIdx] = {
+            ...bList[bIdx],
+            tanggalJadwalMonitoring: undefined
+          };
+          localStorage.setItem(STORAGE_KEYS.BANTUAN, JSON.stringify(bList));
+        }
+      } catch (err) {
+        console.error('Failed to unlink bantuan tanggalJadwalMonitoring on delete:', err);
+      }
+    }
+
+    const filtered = list.filter(j => j.id !== id && (!linkedBantuanId || j.bantuanId !== linkedBantuanId));
     localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(filtered));
 
     this.logAudit({
@@ -1733,6 +1776,15 @@ export class StorageService {
   // --- BACKUP & RESTORE / GOOGLE DRIVE ---
 
   static generateFullBackupPayload(): string {
+    let customMapRegions = null;
+    let customBaseMap = null;
+    try {
+      const savedReg = localStorage.getItem('epml_jatim_custom_map_regions_v2');
+      if (savedReg) customMapRegions = JSON.parse(savedReg);
+      const savedMap = localStorage.getItem('epml_jatim_custom_basemap_v1');
+      if (savedMap) customBaseMap = JSON.parse(savedMap);
+    } catch {}
+
     const backupData = {
       backupTimestamp: new Date().toISOString(),
       institution: 'Kantor Perwakilan Bank Indonesia Provinsi Jawa Timur',
@@ -1741,9 +1793,12 @@ export class StorageService {
       bantuanList: this.getBantuanList(),
       vendors: this.getVendors(),
       artikels: this.getArtikelList(),
+      jadwals: this.getJadwalKalender(),
       annualPagu: this.getAnnualPagu(),
       users: this.getUsers().map(u => ({ ...u, secret2FA: undefined })), // Sensitive data protection
       config: this.getLandingConfig(),
+      customMapRegions,
+      customBaseMap,
       auditLogs: this.getAuditLogs().slice(0, 50)
     };
     return JSON.stringify(backupData, null, 2);
@@ -1763,6 +1818,15 @@ export class StorageService {
       if (data.artikels && Array.isArray(data.artikels)) {
         localStorage.setItem(STORAGE_KEYS.ARTIKEL, JSON.stringify(data.artikels));
       }
+      if (data.jadwals && Array.isArray(data.jadwals)) {
+        localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(data.jadwals));
+      }
+      if (data.customMapRegions && Array.isArray(data.customMapRegions)) {
+        localStorage.setItem('epml_jatim_custom_map_regions_v2', JSON.stringify(data.customMapRegions));
+      }
+      if (data.customBaseMap && typeof data.customBaseMap === 'object') {
+        localStorage.setItem('epml_jatim_custom_basemap_v1', JSON.stringify(data.customBaseMap));
+      }
       if (typeof data.annualPagu === 'number') {
         this.saveAnnualPagu(data.annualPagu, actor);
       }
@@ -1775,13 +1839,13 @@ export class StorageService {
         role: 'Super Admin',
         aksi: 'RESTORE_DATABASE',
         target: 'Database Cadangan',
-        detail: `Pemulihan data cadangan berhasil: ${data.bantuanList.length} entri bantuan dipulihkan.`,
+        detail: `Pemulihan data cadangan berhasil: ${data.bantuanList.length} entri bantuan, jadwal kalender, dan peta kewilayahan dipulihkan.`,
         status: 'SUCCESS'
       });
 
       return {
         success: true,
-        message: `Pemulihan data cadangan berhasil! Sebanyak ${data.bantuanList.length} data bantuan dan konfigurasi sistem telah dipulihkan.`,
+        message: `Pemulihan data cadangan berhasil! Sebanyak ${data.bantuanList.length} data bantuan, jadwal, dan konfigurasi sistem serta peta telah dipulihkan.`,
         count: data.bantuanList.length
       };
     } catch (err: unknown) {

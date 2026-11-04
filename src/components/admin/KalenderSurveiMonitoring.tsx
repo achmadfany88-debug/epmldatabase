@@ -1211,20 +1211,34 @@ export const KalenderSurveiMonitoring: React.FC<KalenderSurveiMonitoringProps> =
                 </span>
               </label>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-300"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-bold shadow-xs cursor-pointer"
-                >
-                  Simpan Jadwal Kalender
-                </button>
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+                {editingJadwal && canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirmTarget(editingJadwal);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 border border-red-200 dark:border-red-800 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Jadwal Ini</span>
+                  </button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setIsFormOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 font-semibold text-slate-700 dark:text-slate-300 text-xs"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs shadow-xs cursor-pointer"
+                  >
+                    Simpan Jadwal Kalender
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1259,15 +1273,18 @@ export const KalenderSurveiMonitoring: React.FC<KalenderSurveiMonitoringProps> =
               <button
                 type="button"
                 onClick={() => setDeleteConfirmTarget(null)}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  if (onDeleteJadwal) onDeleteJadwal(deleteConfirmTarget.id);
+                  if (onDeleteJadwal && deleteConfirmTarget) {
+                    onDeleteJadwal(deleteConfirmTarget.id);
+                  }
                   setDeleteConfirmTarget(null);
+                  setIsFormOpen(false);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer"
               >

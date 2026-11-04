@@ -358,6 +358,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (onUpdateJadwalKalender) {
       onUpdateJadwalKalender(updated);
     }
+    onUpdateBantuanList(StorageService.getBantuanList());
     onRefreshData();
   };
 
