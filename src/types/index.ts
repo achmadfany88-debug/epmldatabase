@@ -16,6 +16,8 @@ export type KategoriLembaga =
 
 export type KategoriBantuan = 'Edukasi' | 'Pemberdayaan Masyarakat' | 'Lingkungan';
 
+export type KategoriSumberBantuan = 'BI Driven' | 'Eksternal';
+
 export type BentukBantuan = 'Barang' | 'Jasa';
 
 export type JenisBarang = 
@@ -122,6 +124,7 @@ export interface BantuanItem {
   id: string;
   namaPenerima: string;
   picAsesmen: string;
+  kategoriInisiatif?: KategoriSumberBantuan;
   statusAsesmen: StatusAsesmen;
   alamat: string;
   kabupatenKota: string;
@@ -175,6 +178,7 @@ export type UserRole = 'Super Admin' | 'Admin Operasional' | 'PIC Asesmen & Lapa
 
 export type AdminMenuTab =
   | 'ANALYTICS'
+  | 'KALENDER'
   | 'MAP'
   | 'REKAP'
   | 'QR'
@@ -266,6 +270,7 @@ export interface LandingPageConfig {
   thirdPartyLogisticsEnabled: boolean;
   logisticsApiEndpoint: string;
   autoWhatsAppNotify: boolean;
+  tampilkanKalenderDiDashboardAtas?: boolean;
 }
 
 export interface WilayahJatim {
@@ -320,5 +325,40 @@ export interface ArtikelItem {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export type JenisKegiatanKalender =
+  | 'Survei Asesmen'
+  | 'Monitoring Lapangan'
+  | 'Verifikasi BAST & Fisik'
+  | 'Evaluasi Dampak';
+
+export type StatusJadwalKalender =
+  | 'Terjadwal'
+  | 'Sedang Berlangsung'
+  | 'Selesai'
+  | 'Dijadwalkan Ulang';
+
+export interface JadwalSurveiMonitoringItem {
+  id: string;
+  bantuanId?: string;
+  namaPenerima: string;
+  kabupatenKota: string;
+  alamat?: string;
+  jenisKegiatan: JenisKegiatanKalender;
+  kategoriInisiatif: KategoriSumberBantuan;
+  kategoriBantuan?: KategoriBantuan;
+  tanggal: string; // YYYY-MM-DD
+  waktuMulai: string;
+  waktuSelesai: string;
+  picPelaksana: string;
+  timPendamping?: string;
+  statusJadwal: StatusJadwalKalender;
+  catatanAgenda: string;
+  hasilTemuan?: string;
+  tampilkanDiDashboardAtas?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 

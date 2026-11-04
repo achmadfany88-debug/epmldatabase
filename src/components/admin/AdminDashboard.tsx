@@ -24,6 +24,8 @@ import {
   AnomaliDistribusi, 
   ArtikelItem,
   BantuanItem, 
+  JadwalSurveiMonitoringItem,
+  KategoriSumberBantuan,
   LandingPageConfig, 
   SystemAuditLog, 
   UserAccount, 
@@ -39,6 +41,7 @@ import { BulkImportBantuanModal } from './BulkImportBantuanModal';
 import { BantuanChartsPanel } from './BantuanChartsPanel';
 import { HasilTrackingMonitoringTab } from './HasilTrackingMonitoringTab';
 import { CriticalAuditTimelineWidget } from './CriticalAuditTimelineWidget';
+import { KalenderSurveiMonitoring } from './KalenderSurveiMonitoring';
 import { PrintQrStickerModal, QrStickerDesignCard, getTotalBarangUnits } from './PrintQrStickerModal';
 import { WILAYAH_JAWA_TIMUR, WILAYAH_KERJA_KPW_JATIM } from '../../data/initialData';
 import { 
@@ -101,6 +104,12 @@ export const ADMIN_NAV_MENUS: {
     label: 'Visualisasi & Anggaran Real-Time',
     shortLabel: 'Visualisasi & Anggaran',
     desc: 'Grafik realisasi anggaran, pagu tahunan & distribusi per pilar'
+  },
+  {
+    id: 'KALENDER',
+    label: 'Kalender Survei Asesmen & Monitoring',
+    shortLabel: 'Kalender Survei & Monitoring',
+    desc: 'Jadwal survei asesmen lapangan, monitoring penerima bantuan & evaluasi'
   },
   {
     id: 'MAP',
@@ -174,6 +183,7 @@ interface AdminDashboardProps {
   userAccounts: UserAccount[];
   vendorList?: VendorItem[];
   artikelList?: ArtikelItem[];
+  jadwalKalender?: JadwalSurveiMonitoringItem[];
   anomalies: AnomaliDistribusi[];
   darkMode?: boolean;
   onToggleDarkMode?: () => void;
@@ -184,6 +194,8 @@ interface AdminDashboardProps {
   onUpdateUserAccounts: (newUsers: UserAccount[]) => void;
   onUpdateVendorList?: (newVendors: VendorItem[]) => void;
   onUpdateArtikelList?: (newArtikels: ArtikelItem[]) => void;
+  onUpdateJadwalKalender?: (newJadwal: JadwalSurveiMonitoringItem[]) => void;
+  onOpenKalenderFullPage?: () => void;
   onRefreshData: () => void;
   onOpenCreateBantuan: () => void;
   onOpenEditBantuan: (item: BantuanItem) => void;
@@ -203,6 +215,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   userAccounts,
   vendorList,
   artikelList,
+  jadwalKalender,
   anomalies,
   darkMode,
   onToggleDarkMode,
@@ -213,6 +226,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onUpdateUserAccounts,
   onUpdateVendorList,
   onUpdateArtikelList,
+  onUpdateJadwalKalender,
+  onOpenKalenderFullPage,
   onRefreshData,
   onOpenCreateBantuan,
   onOpenEditBantuan,
@@ -229,7 +244,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return ALL_MENU_IDS;
     }
     if (Array.isArray(currentUser.allowedMenus) && currentUser.allowedMenus.length > 0) {
-      return currentUser.allowedMenus;
+      const list = [...currentUser.allowedMenus];
+      if (
+        !list.includes('KALENDER') &&
+        (list.includes('ANALYTICS') || list.includes('REKAP') || list.includes('MONITORING'))
+      ) {
+        list.push('KALENDER');
+      }
+      return list;
     }
     return ALL_MENU_IDS;
   }, [currentUser]);
@@ -307,11 +329,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onRefreshData();
   };
 
+  // Jadwal Kalender Survei Asesmen & Monitoring State
+  const [jadwals, setJadwals] = useState<JadwalSurveiMonitoringItem[]>(
+    () => jadwalKalender || StorageService.getJadwalKalender()
+  );
+
+  useEffect(() => {
+    if (jadwalKalender) {
+      setJadwals(jadwalKalender);
+    }
+  }, [jadwalKalender]);
+
+  const handleSaveJadwal = (item: JadwalSurveiMonitoringItem) => {
+    StorageService.saveJadwalKalender(item, currentUser.namaLengkap);
+    const updated = StorageService.getJadwalKalender();
+    setJadwals(updated);
+    if (onUpdateJadwalKalender) {
+      onUpdateJadwalKalender(updated);
+    }
+    onUpdateBantuanList(StorageService.getBantuanList());
+    onRefreshData();
+  };
+
+  const handleDeleteJadwal = (id: string) => {
+    StorageService.deleteJadwalKalender(id, currentUser.namaLengkap);
+    const updated = StorageService.getJadwalKalender();
+    setJadwals(updated);
+    if (onUpdateJadwalKalender) {
+      onUpdateJadwalKalender(updated);
+    }
+    onRefreshData();
+  };
+
+  const handleToggleShowKalenderOnTopDashboard = (show: boolean) => {
+    const updatedConfig: LandingPageConfig = {
+      ...landingConfig,
+      tampilkanKalenderDiDashboardAtas: show
+    };
+    setLocalConfig(updatedConfig);
+    StorageService.saveLandingConfig(updatedConfig, currentUser.namaLengkap);
+    onUpdateLandingConfig(updatedConfig);
+    onRefreshData();
+  };
+
+  const handleQuickChangeKategoriInisiatif = (item: BantuanItem, newInisiatif: KategoriSumberBantuan) => {
+    const updatedItem: BantuanItem = {
+      ...item,
+      kategoriInisiatif: newInisiatif
+    };
+    StorageService.saveBantuan(updatedItem, currentUser.namaLengkap);
+    onUpdateBantuanList(StorageService.getBantuanList());
+    onRefreshData();
+  };
+
   // Search & Filter in Table
   const [tableSearch, setTableSearch] = useState('');
   const [filterKabupaten, setFilterKabupaten] = useState('');
   const [filterKategoriLembaga, setFilterKategoriLembaga] = useState<string>('ALL');
   const [filterKategori, setFilterKategori] = useState('ALL');
+  const [filterKategoriInisiatif, setFilterKategoriInisiatif] = useState<string>('ALL');
   const [filterTahap, setFilterTahap] = useState('ALL');
   const [filterTahun, setFilterTahun] = useState<string>('ALL');
 
@@ -322,7 +398,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Reset pagination to page 1 when filter or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [tableSearch, filterKabupaten, filterKategoriLembaga, filterKategori, filterTahap, filterTahun]);
+  }, [tableSearch, filterKabupaten, filterKategoriLembaga, filterKategori, filterKategoriInisiatif, filterTahap, filterTahun]);
 
   // Logistics Sync Status
   const [syncingLogistics, setSyncingLogistics] = useState(false);
@@ -411,6 +487,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     bantuanList.forEach(b => {
       if (res[b.kategoriBantuan] !== undefined) {
         res[b.kategoriBantuan] += b.nominalBantuan;
+      }
+    });
+    return res;
+  }, [bantuanList]);
+
+  // Kategori Bantuan (BI Driven vs Eksternal) breakdown
+  const perKategoriInisiatif = useMemo(() => {
+    const res = {
+      'BI Driven': {
+        count: 0,
+        nominal: 0,
+        pilar: { Edukasi: 0, 'Pemberdayaan Masyarakat': 0, Lingkungan: 0 }
+      },
+      Eksternal: {
+        count: 0,
+        nominal: 0,
+        pilar: { Edukasi: 0, 'Pemberdayaan Masyarakat': 0, Lingkungan: 0 }
+      }
+    };
+    bantuanList.forEach(b => {
+      const kat: KategoriSumberBantuan = b.kategoriInisiatif === 'Eksternal' ? 'Eksternal' : 'BI Driven';
+      res[kat].count += 1;
+      res[kat].nominal += b.nominalBantuan;
+      if (res[kat].pilar[b.kategoriBantuan] !== undefined) {
+        res[kat].pilar[b.kategoriBantuan] += 1;
       }
     });
     return res;
@@ -511,12 +612,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Filtered Table List
   const filteredTableList = useMemo(() => {
     return bantuanList.filter(b => {
+      const katInisiatif = b.kategoriInisiatif || 'BI Driven';
       const matchSearch =
         b.id.toLowerCase().includes(tableSearch.toLowerCase()) ||
         b.namaPenerima.toLowerCase().includes(tableSearch.toLowerCase()) ||
         b.kabupatenKota.toLowerCase().includes(tableSearch.toLowerCase()) ||
         (b.alamat || '').toLowerCase().includes(tableSearch.toLowerCase()) ||
         (b.statusAsesmen || '').toLowerCase().includes(tableSearch.toLowerCase()) ||
+        katInisiatif.toLowerCase().includes(tableSearch.toLowerCase()) ||
         b.kategoriLembaga.toLowerCase().includes(tableSearch.toLowerCase()) ||
         b.vendorPenyedia.toLowerCase().includes(tableSearch.toLowerCase()) ||
         b.picAsesmen.toLowerCase().includes(tableSearch.toLowerCase());
@@ -524,12 +627,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       const matchKab = !filterKabupaten || b.kabupatenKota === filterKabupaten;
       const matchKatLembaga = filterKategoriLembaga === 'ALL' || b.kategoriLembaga === filterKategoriLembaga;
       const matchKat = filterKategori === 'ALL' || b.kategoriBantuan === filterKategori;
+      const matchKatInisiatif = filterKategoriInisiatif === 'ALL' || katInisiatif === filterKategoriInisiatif;
       const matchThp = filterTahap === 'ALL' || b.statusTahap === filterTahap;
       const matchThn = filterTahun === 'ALL' || b.tahun.toString() === filterTahun;
 
-      return matchSearch && matchKab && matchKatLembaga && matchKat && matchThp && matchThn;
+      return matchSearch && matchKab && matchKatLembaga && matchKat && matchKatInisiatif && matchThp && matchThn;
     });
-  }, [bantuanList, tableSearch, filterKabupaten, filterKategoriLembaga, filterKategori, filterTahap, filterTahun]);
+  }, [bantuanList, tableSearch, filterKabupaten, filterKategoriLembaga, filterKategori, filterKategoriInisiatif, filterTahap, filterTahun]);
 
   // Pagination calculation
   const totalPages = Math.max(1, Math.ceil(filteredTableList.length / itemsPerPage));
@@ -1027,14 +1131,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            <nav className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
+            <nav className="flex flex-row md:flex-col gap-1.5 overflow-x-auto md:overflow-visible pb-2 md:pb-0 scroll-smooth">
               {userAllowedMenus.includes('ANALYTICS') && (
                 <button
                   onClick={() => setActiveTab('ANALYTICS')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'ANALYTICS'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <BarChart3 className={`w-4 h-4 shrink-0 ${activeTab === 'ANALYTICS' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1042,13 +1146,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               )}
 
+              {userAllowedMenus.includes('KALENDER') && (
+                <button
+                  onClick={() => setActiveTab('KALENDER')}
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center justify-between gap-2.5 ${
+                    activeTab === 'KALENDER'
+                      ? 'bg-blue-900 text-white font-bold shadow-xs'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <Calendar className={`w-4 h-4 shrink-0 ${activeTab === 'KALENDER' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
+                    <span className="truncate">Kalender Survei & Monitoring</span>
+                  </div>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                    activeTab === 'KALENDER' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {jadwals.length}
+                  </span>
+                </button>
+              )}
+
               {userAllowedMenus.includes('MAP') && (
                 <button
                   onClick={() => setActiveTab('MAP')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'MAP'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <MapPin className={`w-4 h-4 shrink-0 ${activeTab === 'MAP' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1059,10 +1184,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('REKAP') && (
                 <button
                   onClick={() => setActiveTab('REKAP')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'REKAP'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'REKAP' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1073,10 +1198,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('QR') && (
                 <button
                   onClick={() => setActiveTab('QR')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'QR'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <QrCode className={`w-4 h-4 shrink-0 ${activeTab === 'QR' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1087,10 +1212,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('MONITORING') && (
                 <button
                   onClick={() => setActiveTab('MONITORING')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'MONITORING'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <ClipboardCheck className={`w-4 h-4 shrink-0 ${activeTab === 'MONITORING' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1101,10 +1226,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('VENDOR') && (
                 <button
                   onClick={() => setActiveTab('VENDOR')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center justify-between gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center justify-between gap-2.5 ${
                     activeTab === 'VENDOR'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
@@ -1112,7 +1237,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="truncate">Data Vendor</span>
                   </div>
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'VENDOR' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    activeTab === 'VENDOR' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}>
                     {vendors.length}
                   </span>
@@ -1122,10 +1247,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('EDIT_DASHBOARD') && (
                 <button
                   onClick={() => setActiveTab('EDIT_DASHBOARD')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'EDIT_DASHBOARD'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <LayoutTemplate className={`w-4 h-4 shrink-0 ${activeTab === 'EDIT_DASHBOARD' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1136,10 +1261,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('ARTIKEL') && (
                 <button
                   onClick={() => setActiveTab('ARTIKEL')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center justify-between gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center justify-between gap-2.5 ${
                     activeTab === 'ARTIKEL'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
@@ -1147,7 +1272,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <span className="truncate">Edit Artikel & Berita</span>
                   </div>
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === 'ARTIKEL' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                    activeTab === 'ARTIKEL' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}>
                     {artikels.length}
                   </span>
@@ -1157,10 +1282,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('USERS') && (
                 <button
                   onClick={() => setActiveTab('USERS')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'USERS'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <Users className={`w-4 h-4 shrink-0 ${activeTab === 'USERS' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1171,10 +1296,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('AUDIT') && (
                 <button
                   onClick={() => setActiveTab('AUDIT')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'AUDIT'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <Activity className={`w-4 h-4 shrink-0 ${activeTab === 'AUDIT' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1185,10 +1310,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {userAllowedMenus.includes('CONFIG') && (
                 <button
                   onClick={() => setActiveTab('CONFIG')}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 shrink-0 md:shrink ${
+                  className={`w-auto md:w-full whitespace-nowrap md:whitespace-normal shrink-0 text-left px-3.5 py-2.5 rounded-xl font-medium transition-all text-xs flex items-center gap-2.5 ${
                     activeTab === 'CONFIG'
                       ? 'bg-blue-900 text-white font-bold shadow-xs'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-slate-50 md:bg-transparent'
                   }`}
                 >
                   <Settings className={`w-4 h-4 shrink-0 ${activeTab === 'CONFIG' ? 'text-white' : 'text-slate-500 dark:text-slate-400'}`} />
@@ -1273,15 +1398,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <p className="text-xl font-bold text-slate-900 dark:text-slate-100 tabular-nums mt-1">
                   {bantuanList.length} Lembaga / Kelompok
                 </p>
-                <p className="text-[11px] text-slate-400 mt-1">3 Pilar: Edukasi, UMKM & Lingkungan</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  BI Driven: {perKategoriInisiatif['BI Driven'].count} &bull; Eksternal: {perKategoriInisiatif.Eksternal.count}
+                </p>
               </div>
             </div>
 
-            {/* Real-Time Recharts Visualization Panel: Jenis Bantuan & Status Asesmen */}
+            {/* Real-Time Recharts Visualization Panel: Jenis Bantuan, Status Asesmen & Kategori Bantuan (BI Driven vs Eksternal) */}
             <BantuanChartsPanel
               bantuanList={bantuanList}
-              title="Panel Visualisasi Real-Time: Distribusi Jenis Bantuan & Status Asesmen"
+              title="Panel Visualisasi Real-Time: Jenis Bantuan, Status Asesmen & Kategori Bantuan (BI Driven vs Eksternal)"
             />
+
+            {/* Dedicated Real-Time Visualization Panel: Kategori Bantuan (BI Driven vs Eksternal) */}
+            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-blue-900 dark:text-blue-400" />
+                    <span>Visualisasi Real-Time Kategori Bantuan: BI Driven vs Eksternal</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Perbandingan komposisi penyaluran dan serapan anggaran berdasarkan inisiatif Kategori Bantuan
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold">
+                    Total Penerima: {bantuanList.length} Lembaga
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(['BI Driven', 'Eksternal'] as const).map(katKey => {
+                  const data = perKategoriInisiatif[katKey];
+                  const pctCount = bantuanList.length > 0 ? Math.round((data.count / bantuanList.length) * 100) : 0;
+                  const pctNominal = totalRealisasi > 0 ? Math.round((data.nominal / totalRealisasi) * 100) : 0;
+                  const isBiDriven = katKey === 'BI Driven';
+
+                  return (
+                    <div
+                      key={katKey}
+                      className={`p-4 rounded-xl border ${
+                        isBiDriven
+                          ? 'bg-blue-50/40 dark:bg-blue-950/30 border-blue-200/80 dark:border-blue-800/60'
+                          : 'bg-teal-50/40 dark:bg-teal-950/30 border-teal-200/80 dark:border-teal-800/60'
+                      } space-y-3`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold ${
+                              isBiDriven
+                                ? 'bg-blue-900 text-white'
+                                : 'bg-teal-700 text-white'
+                            }`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                            Kategori: {katKey}
+                          </span>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            {isBiDriven
+                              ? 'Program strategis inisiatif langsung KPw Bank Indonesia Provinsi Jawa Timur'
+                              : 'Program usulan kemitraan / pemangku kepentingan eksternal daerah'}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-bold text-slate-900 dark:text-slate-100 tabular-nums block">
+                            {data.count} Penerima
+                          </span>
+                          <span className="text-[11px] font-bold text-blue-900 dark:text-blue-400 tabular-nums">
+                            {pctCount}% dari total lembaga
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-600 dark:text-slate-300 font-medium">Realisasi Anggaran {katKey}</span>
+                          <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                            Rp {data.nominal.toLocaleString('id-ID')} ({pctNominal}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-2.5 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isBiDriven ? 'bg-blue-900 dark:bg-blue-500' : 'bg-teal-600 dark:bg-teal-400'
+                            }`}
+                            style={{ width: `${pctNominal}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-800 text-[11px]">
+                        <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+                          <span className="text-slate-400 block text-[10px]">Pilar Edukasi</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                            {data.pilar.Edukasi} Lembaga
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+                          <span className="text-slate-400 block text-[10px]">Pemberdayaan</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                            {data.pilar['Pemberdayaan Masyarakat']} Lembaga
+                          </span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-slate-200/60 dark:border-slate-800">
+                          <span className="text-slate-400 block text-[10px]">Lingkungan</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                            {data.pilar.Lingkungan} Lembaga
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Quarterly & Annual Visualization Strip */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1388,6 +1621,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         )}
 
         {/* ========================================================= */}
+        {/* TAB 1B: KALENDER SURVEI ASESMEN & JADWAL MONITORING */}
+        {/* ========================================================= */}
+        {activeTab === 'KALENDER' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <KalenderSurveiMonitoring
+              jadwalList={jadwals}
+              bantuanList={bantuanList}
+              mode="embedded"
+              showOnTopDashboard={landingConfig.tampilkanKalenderDiDashboardAtas !== false}
+              onToggleShowOnTopDashboard={handleToggleShowKalenderOnTopDashboard}
+              onSaveJadwal={handleSaveJadwal}
+              onDeleteJadwal={handleDeleteJadwal}
+              onOpenFullPage={onOpenKalenderFullPage}
+              onSelectBantuan={item => onOpenDetailBantuan(item)}
+            />
+          </div>
+        )}
+
+        {/* ========================================================= */}
         {/* TAB 2: PETA SEBARAN JAWA TIMUR & GEO-TAGGING */}
         {/* ========================================================= */}
         {activeTab === 'MAP' && (
@@ -1416,7 +1668,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="Cari ID Bantuan, Nama Lembaga Penerima, Kabupaten/Kota, Vendor, atau PIC..."
+                    placeholder="Cari ID Bantuan, Nama Lembaga Penerima, Kabupaten/Kota, Kategori (BI Driven/Eksternal), Vendor, atau PIC..."
                     value={tableSearch}
                     onChange={e => setTableSearch(e.target.value)}
                     className="w-full h-9 pl-9 pr-3 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-600 transition-colors"
@@ -1424,7 +1676,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
-                  {(tableSearch || filterTahun !== 'ALL' || filterKabupaten !== '' || filterKategoriLembaga !== 'ALL' || filterKategori !== 'ALL') && (
+                  {(tableSearch || filterTahun !== 'ALL' || filterKabupaten !== '' || filterKategoriLembaga !== 'ALL' || filterKategori !== 'ALL' || filterKategoriInisiatif !== 'ALL') && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1433,6 +1685,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         setFilterKabupaten('');
                         setFilterKategoriLembaga('ALL');
                         setFilterKategori('ALL');
+                        setFilterKategoriInisiatif('ALL');
                       }}
                       className="h-9 px-3 rounded-lg border border-rose-200 dark:border-rose-800/60 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-700 dark:text-rose-300 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
@@ -1487,8 +1740,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              {/* Row 2: Proportional 4-Column Filter Dropdowns */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
+              {/* Row 2: Proportional 5-Column Filter Dropdowns */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80">
                 {/* Filter Tahun (Year) */}
                 <select
                   value={filterTahun}
@@ -1558,6 +1811,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <option value="Pemberdayaan Masyarakat">Pemberdayaan Masyarakat</option>
                   <option value="Lingkungan">Lingkungan</option>
                 </select>
+
+                {/* Kategori Bantuan (BI Driven / Eksternal) Filter */}
+                <select
+                  value={filterKategoriInisiatif}
+                  onChange={e => setFilterKategoriInisiatif(e.target.value)}
+                  title="Filter Kategori Bantuan (BI Driven / Eksternal)"
+                  className={`w-full h-9 px-3 rounded-lg border transition-colors cursor-pointer text-xs font-medium ${
+                    filterKategoriInisiatif !== 'ALL'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-700 font-bold'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <option value="ALL">Semua Kategori Bantuan</option>
+                  <option value="BI Driven">BI Driven</option>
+                  <option value="Eksternal">Eksternal</option>
+                </select>
               </div>
             </div>
 
@@ -1571,6 +1840,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="p-3 w-10 text-center">No</th>
                       <th className="p-3">ID & Penerima</th>
                       <th className="p-3">PIC Asesmen</th>
+                      <th className="p-3 whitespace-nowrap">Kategori Bantuan</th>
                       <th className="p-3 text-center whitespace-nowrap">Status Asesmen</th>
                       <th className="p-3 min-w-[200px]">Alamat Lengkap Penerima</th>
                       <th className="p-3">Kabupaten/Kota</th>
@@ -1585,6 +1855,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {paginatedTableList.map((item, idx) => {
                       const rowNum = startIndex + idx + 1;
+                      const currentInisiatif: KategoriSumberBantuan =
+                        item.kategoriInisiatif === 'Eksternal' ? 'Eksternal' : 'BI Driven';
                       return (
                         <tr
                           key={item.id}
@@ -1602,6 +1874,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </td>
                           <td className="p-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {item.picAsesmen}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <select
+                              value={currentInisiatif}
+                              onChange={e =>
+                                handleQuickChangeKategoriInisiatif(
+                                  item,
+                                  e.target.value as KategoriSumberBantuan
+                                )
+                              }
+                              title="Ubah Kategori Bantuan (BI Driven / Eksternal)"
+                              className={`h-7 px-2.5 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
+                                currentInisiatif === 'BI Driven'
+                                  ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                                  : 'bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 border-teal-200 dark:border-teal-800'
+                              }`}
+                            >
+                              <option value="BI Driven">BI Driven</option>
+                              <option value="Eksternal">Eksternal</option>
+                            </select>
                           </td>
                           <td className="p-3 text-center whitespace-nowrap">
                             <span
@@ -1725,7 +2017,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     })}
                     {filteredTableList.length === 0 && (
                       <tr>
-                        <td colSpan={12} className="p-8 text-center text-slate-500">
+                        <td colSpan={13} className="p-8 text-center text-slate-500">
                           Tidak ditemukan data bantuan yang sesuai filter.
                         </td>
                       </tr>

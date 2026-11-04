@@ -10,6 +10,7 @@ import {
   AnomaliDistribusi, 
   ArtikelItem,
   BantuanItem, 
+  JadwalSurveiMonitoringItem,
   LandingPageConfig, 
   SystemAuditLog, 
   UserAccount,
@@ -22,6 +23,7 @@ import { LandingPage } from './components/LandingPage';
 import { TrackingSubPage } from './components/tracking/TrackingSubPage';
 import { ScanQrSubPage } from './components/tracking/ScanQrSubPage';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { KalenderSurveiMonitoring } from './components/admin/KalenderSurveiMonitoring';
 import { LoginModal } from './components/admin/LoginModal';
 import { BantuanFormModal } from './components/admin/BantuanFormModal';
 import { DetailBantuanModal } from './components/admin/DetailBantuanModal';
@@ -42,8 +44,16 @@ export default function App() {
     return StorageService.getSessionUser();
   });
 
-  // Current View: 'home' (Landing Page) | 'tracking' (Sub Laman Update Tracking) | 'scan_qr' (Halaman Scan QR Bantuan Terpisah) | 'admin' (Portal Admin)
-  const [currentView, setCurrentView] = useState<'home' | 'tracking' | 'scan_qr' | 'admin'>('home');
+  // Current View: 'home' (Landing Page) | 'tracking' (Sub Laman Update Tracking) | 'scan_qr' (Halaman Scan QR Bantuan Terpisah) | 'kalender_monitoring' (Halaman Baru Kalender Survei & Monitoring) | 'admin' (Portal Admin)
+  const [currentView, setCurrentView] = useState<'home' | 'tracking' | 'scan_qr' | 'kalender_monitoring' | 'admin'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('page') === 'kalender-monitoring') {
+        return 'kalender_monitoring';
+      }
+    }
+    return 'home';
+  });
 
   // Database states
   const [bantuanList, setBantuanList] = useState<BantuanItem[]>(() => {
@@ -68,6 +78,10 @@ export default function App() {
 
   const [artikelList, setArtikelList] = useState<ArtikelItem[]>(() => {
     return StorageService.getArtikelList();
+  });
+
+  const [jadwalKalender, setJadwalKalender] = useState<JadwalSurveiMonitoringItem[]>(() => {
+    return StorageService.getJadwalKalender();
   });
 
   const [anomalies, setAnomalies] = useState<AnomaliDistribusi[]>(() => {
@@ -137,6 +151,7 @@ export default function App() {
     });
     setVendorList(StorageService.getVendors());
     setArtikelList(StorageService.getArtikelList());
+    setJadwalKalender(StorageService.getJadwalKalender());
     const latestLanding = StorageService.getLandingConfig();
     setLandingConfig(latestLanding);
     StorageService.hydratePersistedHeroVideo().then(hydratedConfig => {
@@ -282,6 +297,10 @@ export default function App() {
             setCurrentView('scan_qr');
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
+          onNavigateToKalender={() => {
+            setCurrentView('kalender_monitoring');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
           currentView={currentView}
         />
       )}
@@ -297,6 +316,7 @@ export default function App() {
             userAccounts={userAccounts}
             vendorList={vendorList}
             artikelList={artikelList}
+            jadwalKalender={jadwalKalender}
             anomalies={anomalies}
             darkMode={darkMode}
             onToggleDarkMode={toggleDarkMode}
@@ -307,6 +327,11 @@ export default function App() {
             onUpdateUserAccounts={setUserAccounts}
             onUpdateVendorList={setVendorList}
             onUpdateArtikelList={setArtikelList}
+            onUpdateJadwalKalender={setJadwalKalender}
+            onOpenKalenderFullPage={() => {
+              setCurrentView('kalender_monitoring');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
             onRefreshData={handleRefreshData}
             onOpenCreateBantuan={() => {
               setEditingBantuan(null);
@@ -325,6 +350,49 @@ export default function App() {
             onOpenWhatsApp={item => setWhatsAppBantuan(item)}
             onCloseAdmin={() => setCurrentView('home')}
             onLogout={handleLogout}
+          />
+        ) : currentView === 'kalender_monitoring' ? (
+          <KalenderSurveiMonitoring
+            jadwalList={jadwalKalender}
+            bantuanList={bantuanList}
+            mode="full_page"
+            showOnTopDashboard={landingConfig.tampilkanKalenderDiDashboardAtas !== false}
+            onToggleShowOnTopDashboard={show => {
+              const updatedConfig: LandingPageConfig = {
+                ...landingConfig,
+                tampilkanKalenderDiDashboardAtas: show
+              };
+              StorageService.saveLandingConfig(updatedConfig, currentUser?.namaLengkap || 'Admin');
+              setLandingConfig(updatedConfig);
+            }}
+            onSaveJadwal={item => {
+              StorageService.saveJadwalKalender(
+                item,
+                currentUser?.namaLengkap || 'PIC Lapangan'
+              );
+              const updated = StorageService.getJadwalKalender();
+              setJadwalKalender(updated);
+              handleRefreshData();
+              showPushToast(`Jadwal kalender "${item.jenisKegiatan} - ${item.namaPenerima}" berhasil disimpan.`);
+            }}
+            onDeleteJadwal={id => {
+              StorageService.deleteJadwalKalender(
+                id,
+                currentUser?.namaLengkap || 'Admin'
+              );
+              const updated = StorageService.getJadwalKalender();
+              setJadwalKalender(updated);
+              handleRefreshData();
+              showPushToast('Jadwal kalender berhasil dihapus.');
+            }}
+            onBackFromFullPage={() => {
+              if (typeof window !== 'undefined' && window.location.search.includes('page=kalender-monitoring')) {
+                window.history.replaceState({}, '', window.location.pathname);
+              }
+              setCurrentView(currentUser ? 'admin' : 'home');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onSelectBantuan={item => setSelectedDetailBantuan(item)}
           />
         ) : currentView === 'scan_qr' ? (
           <ScanQrSubPage
@@ -351,11 +419,16 @@ export default function App() {
             bantuanList={bantuanList}
             landingConfig={landingConfig}
             artikelList={artikelList}
+            jadwalKalender={jadwalKalender}
             onOpenLogin={() => setIsLoginModalOpen(true)}
             onSelectBantuan={item => setSelectedDetailBantuan(item)}
             onOpenQrScanner={() => setIsQrScannerOpen(true)}
             onNavigateToTracking={() => {
               setCurrentView('tracking');
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            onOpenKalenderPage={() => {
+              setCurrentView('kalender_monitoring');
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           />

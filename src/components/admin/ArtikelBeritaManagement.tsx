@@ -509,17 +509,23 @@ export const ArtikelBeritaManagement: React.FC<ArtikelBeritaManagementProps> = (
         <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-3">
           <Newspaper className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
           <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-            Tidak ada artikel atau berita yang sesuai filter
+            {artikelList.length === 0
+              ? 'Belum ada publikasi artikel & berita'
+              : 'Tidak ada artikel atau berita yang sesuai filter'}
           </h4>
           <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            Coba ubah kata kunci pencarian atau reset filter kategori untuk melihat berita lainnya.
+            {artikelList.length === 0
+              ? 'Seluruh artikel berita telah dihapus. Klik tombol "Tambah Artikel & Berita Baru" di atas untuk mempublikasikan berita baru ke Dashboard.'
+              : 'Coba ubah kata kunci pencarian atau reset filter kategori untuk melihat berita lainnya.'}
           </p>
-          <button
-            onClick={() => { setSearchQuery(''); setFilterKategori('ALL'); setFilterStatus('ALL'); }}
-            className="px-3.5 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg font-semibold text-slate-700 dark:text-slate-200"
-          >
-            Reset Semua Filter
-          </button>
+          {artikelList.length > 0 && (
+            <button
+              onClick={() => { setSearchQuery(''); setFilterKategori('ALL'); setFilterStatus('ALL'); }}
+              className="px-3.5 py-1.5 text-xs bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded-lg font-semibold text-slate-700 dark:text-slate-200"
+            >
+              Reset Semua Filter
+            </button>
+          )}
         </div>
       )}
 

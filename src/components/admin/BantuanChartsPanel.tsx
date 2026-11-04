@@ -35,7 +35,7 @@ interface BantuanChartsPanelProps {
 }
 
 type MetricMode = 'COUNT' | 'NOMINAL';
-type JenisDimension = 'SPESIFIK' | 'PILAR' | 'BENTUK';
+type JenisDimension = 'SPESIFIK' | 'PILAR' | 'BENTUK' | 'INISIATIF';
 type BarDisplayMode = 'TOTAL' | 'STACKED_STATUS';
 
 const STATUS_ASESMEN_CONFIG: {
@@ -225,6 +225,23 @@ export const BantuanChartsPanel: React.FC<BantuanChartsPanelProps> = ({
           DitolakCount: 0
         });
       });
+    } else if (jenisDimension === 'INISIATIF') {
+      ['BI Driven', 'Eksternal'].forEach(kat => {
+        buckets.set(kat, {
+          name: kat,
+          shortName: kat,
+          totalCount: 0,
+          totalNominal: 0,
+          Asesmen: 0,
+          Disetujui: 0,
+          'Menunggu Tindak Lanjut': 0,
+          Ditolak: 0,
+          AsesmenCount: 0,
+          DisetujuiCount: 0,
+          MenungguCount: 0,
+          DitolakCount: 0
+        });
+      });
     }
 
     const getJenisKey = (item: BantuanItem): string => {
@@ -233,6 +250,9 @@ export const BantuanChartsPanel: React.FC<BantuanChartsPanelProps> = ({
       }
       if (jenisDimension === 'BENTUK') {
         return item.bentukBantuan === 'Jasa' ? 'Bantuan Jasa / Program' : 'Bantuan Barang Fisik';
+      }
+      if (jenisDimension === 'INISIATIF') {
+        return item.kategoriInisiatif || 'BI Driven';
       }
       if (item.bentukBantuan === 'Jasa') {
         return 'Jasa & Pelatihan';
@@ -452,6 +472,17 @@ export const BantuanChartsPanel: React.FC<BantuanChartsPanelProps> = ({
                       }`}
                     >
                       Barang vs Jasa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setJenisDimension('INISIATIF')}
+                      className={`h-7 px-2.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                        jenisDimension === 'INISIATIF'
+                          ? 'bg-[#002B66] text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      BI Driven vs Eksternal
                     </button>
                   </div>
 

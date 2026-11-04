@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BantuanItem, LandingPageConfig, SystemAuditLog, UserAccount, WilayahJatim, VendorItem } from '../types';
+import { BantuanItem, LandingPageConfig, SystemAuditLog, UserAccount, WilayahJatim, VendorItem, JadwalSurveiMonitoringItem } from '../types';
 
 export const WILAYAH_JAWA_TIMUR: WilayahJatim[] = [
   { nama: 'Kota Surabaya', tipe: 'Kota', lat: -7.2575, lng: 112.7521, alokasiPagu: 2500000000 },
@@ -115,7 +115,8 @@ export const INITIAL_LANDING_CONFIG: LandingPageConfig = {
   googleMapsEmbedUrl: 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3957.9405629166827!2d112.73552087574312!3d-7.247596271190538!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x2dd7f9389e74ce91%3A0xe54b9cb7b640db05!2sKantor%20Perwakilan%20Bank%20Indonesia%20Provinsi%20Jawa%20Timur!5e0!3m2!1sid!2sid!4v1700000000000!5m2!1sid!2sid',
   thirdPartyLogisticsEnabled: true,
   logisticsApiEndpoint: 'https://api.logistik-bi-jatim.internal/v1/sync',
-  autoWhatsAppNotify: true
+  autoWhatsAppNotify: true,
+  tampilkanKalenderDiDashboardAtas: false
 };
 
 export const INITIAL_USERS: UserAccount[] = [
@@ -1301,5 +1302,106 @@ export const INITIAL_VENDORS: VendorItem[] = [
     updatedAt: '2025-07-19'
   }
 ];
+
+export const INITIAL_JADWAL_KALENDER: JadwalSurveiMonitoringItem[] = [
+  {
+    id: 'JDW-2026-001',
+    bantuanId: 'EPML-JTM-2025-001',
+    namaPenerima: 'SMK Budi Utomo & Komunitas Vokasi Digital',
+    kabupatenKota: 'Kabupaten Pasuruan',
+    alamat: 'Jl. Raya Gadingrejo No. 45, Sumberrejo',
+    jenisKegiatan: 'Monitoring Lapangan',
+    kategoriInisiatif: 'BI Driven',
+    kategoriBantuan: 'Edukasi',
+    tanggal: new Date().toISOString().slice(0, 8) + '05',
+    waktuMulai: '09:00',
+    waktuSelesai: '12:00',
+    picPelaksana: 'Dimas Wicaksono, S.E.',
+    timPendamping: 'Tim EPML KPw BI Prov. Jatim',
+    statusJadwal: 'Terjadwal',
+    catatanAgenda: 'Monitoring pemanfaatan 25 unit PC Laboratorium Vokasi Coding & Desain Grafis serta pengecekan QR per unit.',
+    tampilkanDiDashboardAtas: true,
+    createdAt: '2026-01-10',
+    updatedAt: '2026-01-10'
+  },
+  {
+    id: 'JDW-2026-002',
+    bantuanId: 'EPML-JTM-2025-002',
+    namaPenerima: 'Koperasi Tani Kopi Lereng Ijen Makmur',
+    kabupatenKota: 'Kabupaten Banyuwangi',
+    alamat: 'Desa Tamansari, Kec. Licin, Kaki Gunung Ijen',
+    jenisKegiatan: 'Evaluasi Dampak',
+    kategoriInisiatif: 'BI Driven',
+    kategoriBantuan: 'Pemberdayaan Masyarakat',
+    tanggal: new Date().toISOString().slice(0, 8) + '11',
+    waktuMulai: '10:00',
+    waktuSelesai: '14:00',
+    picPelaksana: 'Rangga Prawira, M.M.',
+    timPendamping: 'Fungsi Pelaksanaan Pengembangan UMKM',
+    statusJadwal: 'Terjadwal',
+    catatanAgenda: 'Evaluasi peningkatan kapasitas produksi kopi pasca instalasi mesin Huller & Roaster 15 kg.',
+    tampilkanDiDashboardAtas: true,
+    createdAt: '2026-01-12',
+    updatedAt: '2026-01-12'
+  },
+  {
+    id: 'JDW-2026-003',
+    namaPenerima: 'Kelompok Tani Garam Rebus Pesisir Madura',
+    kabupatenKota: 'Kabupaten Sumenep',
+    alamat: 'Jl. Raya Kalianget No. 18, Kab. Sumenep',
+    jenisKegiatan: 'Survei Asesmen',
+    kategoriInisiatif: 'Eksternal',
+    kategoriBantuan: 'Pemberdayaan Masyarakat',
+    tanggal: new Date().toISOString().slice(0, 8) + '16',
+    waktuMulai: '08:30',
+    waktuSelesai: '12:30',
+    picPelaksana: 'Dimas Wicaksono, S.E.',
+    timPendamping: 'Tim Survei Kelayakan PSBI Jatim',
+    statusJadwal: 'Sedang Berlangsung',
+    catatanAgenda: 'Survei asesmen lapangan kelayakan calon penerima bantuan rumah tunnel garam geomembran usulan eksternal.',
+    tampilkanDiDashboardAtas: true,
+    createdAt: '2026-01-14',
+    updatedAt: '2026-01-14'
+  },
+  {
+    id: 'JDW-2026-004',
+    namaPenerima: 'Komunitas Bank Sampah & Daur Ulang Pesisir Gresik',
+    kabupatenKota: 'Kabupaten Gresik',
+    alamat: 'Jl. Harun Thohir No. 42, Pulopancikan, Kab. Gresik',
+    jenisKegiatan: 'Verifikasi BAST & Fisik',
+    kategoriInisiatif: 'BI Driven',
+    kategoriBantuan: 'Lingkungan',
+    tanggal: new Date().toISOString().slice(0, 8) + '21',
+    waktuMulai: '13:00',
+    waktuSelesai: '15:30',
+    picPelaksana: 'Bagus Prasetyo',
+    timPendamping: 'Tim Logistik & Verifikasi Aset',
+    statusJadwal: 'Terjadwal',
+    catatanAgenda: 'Verifikasi fisik serah terima BAST mesin pencacah dan press hidrolik sampah plastik.',
+    tampilkanDiDashboardAtas: true,
+    createdAt: '2026-01-15',
+    updatedAt: '2026-01-15'
+  },
+  {
+    id: 'JDW-2026-005',
+    namaPenerima: 'Pondok Pesantren Al-Amanah Junwangi',
+    kabupatenKota: 'Kabupaten Sidoarjo',
+    alamat: 'Desa Junwangi, Kec. Krian, Kab. Sidoarjo',
+    jenisKegiatan: 'Survei Asesmen',
+    kategoriInisiatif: 'Eksternal',
+    kategoriBantuan: 'Edukasi',
+    tanggal: new Date().toISOString().slice(0, 8) + '25',
+    waktuMulai: '09:00',
+    waktuSelesai: '11:30',
+    picPelaksana: 'Dra. Endang Sri Astuti, Ak.',
+    timPendamping: 'Tim Asesmen Edukasi Vokasi',
+    statusJadwal: 'Terjadwal',
+    catatanAgenda: 'Survei asesmen kesiapan ruang laboratorium multimedia dan verifikasi dokumen legalitas yayasan.',
+    tampilkanDiDashboardAtas: true,
+    createdAt: '2026-01-18',
+    updatedAt: '2026-01-18'
+  }
+];
+
 
 

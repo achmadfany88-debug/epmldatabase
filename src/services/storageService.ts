@@ -16,7 +16,8 @@ import {
   INITIAL_USERS,
   INITIAL_VENDORS,
   EPML_ARTIKEL,
-  WILAYAH_JAWA_TIMUR
+  WILAYAH_JAWA_TIMUR,
+  INITIAL_JADWAL_KALENDER
 } from '../data/initialData';
 import { 
   AdminMenuTab,
@@ -29,11 +30,13 @@ import {
   VendorItem,
   KondisiItemBarang,
   KondisiUnitSatuan,
-  StatusKondisiFisik
+  StatusKondisiFisik,
+  JadwalSurveiMonitoringItem
 } from '../types';
 
 const ALL_ADMIN_MENUS: AdminMenuTab[] = [
   'ANALYTICS',
+  'KALENDER',
   'MAP',
   'REKAP',
   'QR',
@@ -55,6 +58,7 @@ const STORAGE_KEYS = {
   CONFIG: 'bi_epml_landing_config_v1',
   VENDORS: 'bi_epml_vendors_v1',
   ARTIKEL: 'bi_epml_artikel_list_v1',
+  JADWAL_KALENDER: 'bi_epml_jadwal_kalender_v1',
   ANNUAL_PAGU: 'bi_epml_annual_pagu_v1',
   SESSION: 'bi_epml_auth_session_token_v1',
   ANOMALIES: 'bi_epml_anomalies_cache_v1',
@@ -84,6 +88,9 @@ export class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.ARTIKEL)) {
       localStorage.setItem(STORAGE_KEYS.ARTIKEL, JSON.stringify(EPML_ARTIKEL));
     }
+    if (!localStorage.getItem(STORAGE_KEYS.JADWAL_KALENDER)) {
+      localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(INITIAL_JADWAL_KALENDER));
+    }
   }
 
   // --- BANTUAN DATA ---
@@ -92,7 +99,22 @@ export class StorageService {
     this.initDatabase();
     try {
       const data = localStorage.getItem(STORAGE_KEYS.BANTUAN);
-      return data ? JSON.parse(data) : INITIAL_BANTUAN;
+      const parsed: BantuanItem[] = data ? JSON.parse(data) : INITIAL_BANTUAN;
+      let needsSave = false;
+      const hydrated = parsed.map((item, idx) => {
+        if (!item.kategoriInisiatif) {
+          needsSave = true;
+          return {
+            ...item,
+            kategoriInisiatif: (idx % 3 === 1 ? 'Eksternal' : 'BI Driven') as 'BI Driven' | 'Eksternal'
+          };
+        }
+        return item;
+      });
+      if (needsSave) {
+        localStorage.setItem(STORAGE_KEYS.BANTUAN, JSON.stringify(hydrated));
+      }
+      return hydrated;
     } catch {
       return INITIAL_BANTUAN;
     }
@@ -1391,6 +1413,124 @@ export class StorageService {
     return true;
   }
 
+  // --- KALENDER SURVEI ASESMEN & JADWAL MONITORING ---
+
+  static getJadwalKalender(): JadwalSurveiMonitoringItem[] {
+    this.initDatabase();
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.JADWAL_KALENDER);
+      const saved: JadwalSurveiMonitoringItem[] = data ? JSON.parse(data) : INITIAL_JADWAL_KALENDER;
+      // Also merge any recipient items that have tanggalJadwalMonitoring set and aren't yet in the calendar
+      const bantuanList = this.getBantuanList();
+      const existingBantuanIds = new Set(saved.map(j => j.bantuanId).filter(Boolean));
+      const syncedFromBantuan: JadwalSurveiMonitoringItem[] = [];
+
+      bantuanList.forEach(b => {
+        if (b.tanggalJadwalMonitoring && !existingBantuanIds.has(b.id)) {
+          syncedFromBantuan.push({
+            id: `JDW-AUTO-${b.id}`,
+            bantuanId: b.id,
+            namaPenerima: b.namaPenerima,
+            kabupatenKota: b.kabupatenKota,
+            alamat: b.alamat,
+            jenisKegiatan: b.statusTahap === 'Asesmen' ? 'Survei Asesmen' : 'Monitoring Lapangan',
+            kategoriInisiatif: b.kategoriInisiatif || 'BI Driven',
+            kategoriBantuan: b.kategoriBantuan,
+            tanggal: b.tanggalJadwalMonitoring,
+            waktuMulai: '09:00',
+            waktuSelesai: '12:00',
+            picPelaksana: b.picAsesmen || 'Tim EPML KPw BI Jatim',
+            timPendamping: 'Tim Verifikasi Lapangan EPML',
+            statusJadwal: 'Terjadwal',
+            catatanAgenda: `Monitoring & evaluasi lapangan untuk paket bantuan: ${b.detailBantuan}`,
+            tampilkanDiDashboardAtas: true,
+            createdAt: b.createdAt || new Date().toISOString().slice(0, 10),
+            updatedAt: b.updatedAt || new Date().toISOString().slice(0, 10)
+          });
+        }
+      });
+
+      if (syncedFromBantuan.length > 0) {
+        const merged = [...saved, ...syncedFromBantuan];
+        localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(merged));
+        return merged;
+      }
+      return saved;
+    } catch {
+      return INITIAL_JADWAL_KALENDER;
+    }
+  }
+
+  static saveJadwalKalender(
+    item: JadwalSurveiMonitoringItem,
+    actor = 'Admin'
+  ): JadwalSurveiMonitoringItem {
+    const list = this.getJadwalKalender();
+    const index = list.findIndex(j => j.id === item.id);
+    const now = new Date().toISOString().slice(0, 10);
+    const updated: JadwalSurveiMonitoringItem = {
+      ...item,
+      updatedAt: now,
+      createdAt: item.createdAt || now
+    };
+
+    if (index >= 0) {
+      list[index] = updated;
+      this.logAudit({
+        username: actor,
+        role: 'Administrator',
+        aksi: 'UPDATE_JADWAL_KALENDER',
+        target: `${updated.jenisKegiatan} - ${updated.namaPenerima}`,
+        detail: `Memperbarui jadwal ${updated.jenisKegiatan} pada tanggal ${updated.tanggal} untuk ${updated.namaPenerima} (${updated.kabupatenKota}).`,
+        status: 'SUCCESS'
+      });
+    } else {
+      list.unshift(updated);
+      this.logAudit({
+        username: actor,
+        role: 'Administrator',
+        aksi: 'CREATE_JADWAL_KALENDER',
+        target: `${updated.jenisKegiatan} - ${updated.namaPenerima}`,
+        detail: `Menambahkan jadwal baru ${updated.jenisKegiatan} pada tanggal ${updated.tanggal} untuk ${updated.namaPenerima} (${updated.kabupatenKota}).`,
+        status: 'SUCCESS'
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(list));
+
+    // If linked to a BantuanItem, sync tanggalJadwalMonitoring back to that BantuanItem
+    if (updated.bantuanId) {
+      const bantuanList = this.getBantuanList();
+      const bIdx = bantuanList.findIndex(b => b.id === updated.bantuanId);
+      if (bIdx >= 0) {
+        bantuanList[bIdx] = {
+          ...bantuanList[bIdx],
+          tanggalJadwalMonitoring: updated.tanggal
+        };
+        localStorage.setItem(STORAGE_KEYS.BANTUAN, JSON.stringify(bantuanList));
+      }
+    }
+
+    return updated;
+  }
+
+  static deleteJadwalKalender(id: string, actor = 'Admin'): boolean {
+    const list = this.getJadwalKalender();
+    const target = list.find(j => j.id === id);
+    const filtered = list.filter(j => j.id !== id);
+    localStorage.setItem(STORAGE_KEYS.JADWAL_KALENDER, JSON.stringify(filtered));
+
+    this.logAudit({
+      username: actor,
+      role: 'Administrator',
+      aksi: 'DELETE_JADWAL_KALENDER',
+      target: target ? `${target.jenisKegiatan} - ${target.namaPenerima}` : id,
+      detail: `Menghapus jadwal kalender survei/monitoring: ${target?.namaPenerima || id} (${target?.tanggal || '-'}).`,
+      status: 'WARNING'
+    });
+    return true;
+  }
+
   // --- AUDIT LOGS ---
 
   static getAuditLogs(): SystemAuditLog[] {
@@ -1658,12 +1798,13 @@ export class StorageService {
       'ID Bantuan',
       'Nama Penerima',
       'PIC Asesmen Bantuan',
+      'Kategori Bantuan (BI Driven / Eksternal)',
       'Status Asesmen',
       'Alamat',
       'Kabupaten / Kota',
       'No. HP',
       'Kategori Lembaga',
-      'Kategori Bantuan (EPML)',
+      'Pilar Bantuan (EPML)',
       'Bentuk Bantuan',
       'Jenis Barang / Deskripsi Jasa',
       'QTY',
@@ -1691,6 +1832,7 @@ export class StorageService {
         escape(item.id),
         escape(item.namaPenerima),
         escape(item.picAsesmen),
+        escape(item.kategoriInisiatif || 'BI Driven'),
         escape(item.statusAsesmen),
         escape(item.alamat),
         escape(item.kabupatenKota),

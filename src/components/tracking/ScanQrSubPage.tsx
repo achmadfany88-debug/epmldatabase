@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import jsQR from 'jsqr';
 import {
   BantuanItem,
   KondisiItemBarang,
@@ -35,7 +36,12 @@ import {
   Layers,
   Edit3,
   SlidersHorizontal,
-  Sparkles
+  Sparkles,
+  SwitchCamera,
+  Zap,
+  ZapOff,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 
 interface ScanQrSubPageProps {
@@ -67,12 +73,33 @@ export const ScanQrSubPage: React.FC<ScanQrSubPageProps> = ({
   onBackToHome,
   onUpdateKondisiViaQr
 }) => {
-  // Verification Gate State (wajib verifikasi username & password sebelum akses halaman Scan QR)
-  const [verifiedUser, setVerifiedUser] = useState<UserAccount | null>(null);
+  // Verification Gate State: auto-detect logged-in session user if available
+  const [verifiedUser, setVerifiedUser] = useState<UserAccount | null>(() => {
+    return StorageService.getSessionUser();
+  });
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
+
+  // Camera & Real-Time QR Scanner State (Auto-detects laptop webcam & smartphone camera)
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const isPausedRef = useRef<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+  const [isDetectingCamera, setIsDetectingCamera] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [hasTorch, setHasTorch] = useState<boolean>(false);
+  const [isTorchOn, setIsTorchOn] = useState<boolean>(false);
+  const [isQrDetectedFlash, setIsQrDetectedFlash] = useState<boolean>(false);
+  const [detectedQrCodeText, setDetectedQrCodeText] = useState<string>('');
 
   // Scan QR Workspace State
   const [qrCodeSearchInput, setQrCodeSearchInput] = useState('');
@@ -208,8 +235,8 @@ export const ScanQrSubPage: React.FC<ScanQrSubPageProps> = ({
   };
 
   // Parse a scanned/typed QR code string such as "EPML-JTM-2025-004-U02" or "EPML-JTM-2025-004"
-  const handleLookupQrCode = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLookupQrCode = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const raw = qrCodeSearchInput.trim();
     if (!raw) return;
 
@@ -219,9 +246,293 @@ export const ScanQrSubPage: React.FC<ScanQrSubPageProps> = ({
       const resolved = StorageService.resolveScannedQrCode(raw, bantuanList);
       if (resolved) {
         loadBantuanIntoScanner(resolved.bantuan, resolved.globalUnitIndex);
+        setSaveSuccessMessage(`QR Terverifikasi: ${raw} (${resolved.bantuan.namaPenerima} - Unit #${resolved.globalUnitIndex})`);
+      } else {
+        setSaveSuccessMessage(`Kode "${raw}" tidak ditemukan dalam database bantuan EPML.`);
       }
-    }, 350);
+    }, 250);
   };
+
+  // Stop camera tracks and scanning animation frame
+  const stopCamera = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {}
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setIsCameraActive(false);
+    setIsTorchOn(false);
+  };
+
+  // Robust auto-detect camera function (handles smartphone environment/front camera & laptop webcams)
+  const startCamera = async (targetDeviceId?: string, mode?: 'environment' | 'user') => {
+    stopCamera();
+    setCameraError(null);
+    setIsDetectingCamera(true);
+
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError('Browser ini tidak mendukung akses kamera langsung (WebRTC tidak tersedia). Silakan gunakan input manual kode QR atau upload foto QR.');
+      setIsDetectingCamera(false);
+      return;
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vDevs = devices.filter(d => d.kind === 'videoinput');
+      setVideoDevices(vDevs);
+    } catch (e) {
+      console.warn('enumerateDevices error:', e);
+    }
+
+    let stream: MediaStream | null = null;
+    const preferFacing = mode || facingMode;
+
+    // Strategy 1: Target device ID if user selected a specific camera
+    if (targetDeviceId) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: targetDeviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      } catch (e) {
+        console.warn('Target deviceId constraint failed, falling back...', e);
+      }
+    }
+
+    // Strategy 2: Ideal facingMode ('environment' for phone back camera or 'user' for laptop webcam)
+    if (!stream) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: preferFacing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      } catch (e) {
+        console.warn('Ideal facingMode failed, trying general video constraint...', e);
+      }
+    }
+
+    // Strategy 3: General fallback `{ video: true }` (Guaranteed to detect laptop webcams!)
+    if (!stream) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      } catch (err: any) {
+        console.error('All camera attempts failed:', err);
+        let msg = 'Kamera tidak dapat diakses. Pastikan izin kamera telah disetujui di browser/perangkat Anda.';
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          msg = 'Izin akses kamera ditolak. Silakan izinkan akses kamera di pengaturan browser atau smartphone Anda.';
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          msg = 'Tidak ada perangkat kamera yang terdeteksi di HP atau Laptop Anda.';
+        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+          msg = 'Kamera sedang digunakan oleh aplikasi lain. Tutup aplikasi tersebut lalu coba lagi.';
+        }
+        setCameraError(msg);
+        setIsDetectingCamera(false);
+        return;
+      }
+    }
+
+    streamRef.current = stream;
+    setIsCameraActive(true);
+    setIsDetectingCamera(false);
+
+    // Check torch capability
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      try {
+        const caps = (track.getCapabilities && track.getCapabilities()) as any;
+        setHasTorch(!!(caps && caps.torch));
+      } catch (e) {
+        setHasTorch(false);
+      }
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute('playsinline', 'true');
+      try {
+        await videoRef.current.play();
+      } catch (e) {
+        console.warn('video.play() waiting for interaction:', e);
+      }
+      startScanLoop();
+    }
+  };
+
+  // Continuous frame scanning loop with jsQR
+  const startScanLoop = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+
+    const tick = () => {
+      const video = videoRef.current;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        let canvas = canvasRef.current;
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          canvasRef.current = canvas;
+        }
+
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (w > 0 && h > 0) {
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, w, h);
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert'
+            });
+
+            if (code && code.data && !isPausedRef.current) {
+              handleQrCodeDetected(code.data);
+            }
+          }
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(tick);
+    };
+
+    animFrameRef.current = requestAnimationFrame(tick);
+  };
+
+  // Called when a QR code is recognized by jsQR
+  const handleQrCodeDetected = (rawCode: string) => {
+    const cleaned = rawCode.trim();
+    if (!cleaned) return;
+
+    isPausedRef.current = true;
+    setDetectedQrCodeText(cleaned);
+    setIsQrDetectedFlash(true);
+
+    // Chime sound synthesized via Web Audio API
+    try {
+      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtxClass) {
+        const audioCtx = new AudioCtxClass();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+      }
+    } catch (e) {}
+
+    // Haptic feedback for smartphones
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate([100, 50, 100]);
+      } catch (e) {}
+    }
+
+    setTimeout(() => {
+      setIsQrDetectedFlash(false);
+    }, 1500);
+
+    const resolved = StorageService.resolveScannedQrCode(cleaned, bantuanList);
+    if (resolved) {
+      loadBantuanIntoScanner(resolved.bantuan, resolved.globalUnitIndex);
+      setSaveSuccessMessage(
+        `QR Terdeteksi: ${cleaned} — ${resolved.bantuan.namaPenerima} (Unit #${resolved.globalUnitIndex})`
+      );
+    } else {
+      setQrCodeSearchInput(cleaned);
+      setSaveSuccessMessage(`Kode terbaca: "${cleaned}". Tidak terdaftar pada database bantuan aktif.`);
+    }
+
+    // Cooldown before next scan
+    setTimeout(() => {
+      isPausedRef.current = false;
+    }, 2500);
+  };
+
+  const handleToggleFacingMode = () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextMode);
+    startCamera(undefined, nextMode);
+  };
+
+  const handleToggleTorch = async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    if (track) {
+      try {
+        const nextState = !isTorchOn;
+        await (track as any).applyConstraints({
+          advanced: [{ torch: nextState }]
+        });
+        setIsTorchOn(nextState);
+      } catch (e) {
+        console.warn('Torch constraint error:', e);
+      }
+    }
+  };
+
+  const handleFileUploadQr = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imgData.data, imgData.width, imgData.height);
+          if (code && code.data) {
+            handleQrCodeDetected(code.data);
+          } else {
+            setCameraError('Tidak ditemukan kode QR yang jelas pada gambar yang diunggah. Pastikan gambar jelas dan tidak buram.');
+          }
+        }
+      };
+      img.src = ev.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Automatically activate camera when user is inside the scanner
+  useEffect(() => {
+    if (verifiedUser) {
+      startCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [verifiedUser]);
 
   const deriveItemConditionFromUnits = (units: KondisiUnitSatuan[]): StatusKondisiFisik => {
     if (!units || units.length === 0) return 'Baik & Lengkap';
@@ -609,17 +920,181 @@ export const ScanQrSubPage: React.FC<ScanQrSubPageProps> = ({
                 </span>
               </div>
 
-              {/* Camera Viewport */}
-              <div className="relative h-44 w-full rounded-xl bg-slate-950 border border-slate-800 overflow-hidden flex flex-col items-center justify-center text-center p-4">
-                <div className="w-28 h-28 border-2 border-dashed border-emerald-400 rounded-xl flex items-center justify-center relative">
-                  <div className="absolute inset-0 bg-emerald-500/10 animate-pulse rounded-xl" />
-                  <QrCode className="w-9 h-9 text-emerald-400" />
+              {/* Hidden file input for QR image upload fallback */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUploadQr}
+                className="hidden"
+              />
+
+              {/* Live Interactive Camera Viewport */}
+              <div className={`relative h-64 sm:h-72 w-full rounded-2xl bg-slate-950 border overflow-hidden flex flex-col items-center justify-center transition-all ${
+                isQrDetectedFlash 
+                  ? 'border-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.5)] ring-4 ring-emerald-400/50' 
+                  : 'border-slate-800 shadow-md'
+              }`}>
+                {/* 1. Live Video Stream */}
+                <video
+                  ref={videoRef}
+                  playsInline
+                  autoPlay
+                  muted
+                  className={`w-full h-full object-cover ${!isCameraActive ? 'hidden' : 'block'}`}
+                />
+
+                {/* 2. Top Controls & Status Bar Overlay */}
+                <div className="absolute top-3 inset-x-3 z-20 flex items-center justify-between gap-2 pointer-events-auto">
+                  {/* Status Indicator */}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-white/10 text-[10px] font-bold text-white shadow-xs">
+                    {isDetectingCamera ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 text-amber-400 animate-spin" />
+                        <span className="text-amber-300">Mendeteksi Kamera...</span>
+                      </>
+                    ) : isCameraActive ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-emerald-300">
+                          {facingMode === 'environment' ? 'Kamera Belakang' : 'Webcam / Depan'} • Aktif
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-rose-500" />
+                        <span className="text-rose-300">Kamera Nonaktif</span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Camera Action Buttons */}
+                  <div className="flex items-center gap-1.5">
+                    {/* Torch Toggle (if available on mobile device) */}
+                    {hasTorch && isCameraActive && (
+                      <button
+                        type="button"
+                        onClick={handleToggleTorch}
+                        className={`p-1.5 rounded-lg backdrop-blur-md border transition-all cursor-pointer ${
+                          isTorchOn
+                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-sm'
+                            : 'bg-slate-900/80 text-white border-white/10 hover:bg-slate-800'
+                        }`}
+                        title={isTorchOn ? 'Matikan Senter' : 'Nyalakan Senter'}
+                      >
+                        {isTorchOn ? <Zap className="w-3.5 h-3.5" /> : <ZapOff className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+
+                    {/* Switch Camera Button (Front <-> Back / Laptop <-> Phone) */}
+                    <button
+                      type="button"
+                      onClick={handleToggleFacingMode}
+                      className="px-2 py-1 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-white border border-white/10 backdrop-blur-md text-[10px] font-bold flex items-center gap-1 shadow-xs cursor-pointer transition-colors"
+                      title="Ganti Kamera (Kamera Depan / Belakang / Webcam)"
+                    >
+                      <SwitchCamera className="w-3.5 h-3.5 text-blue-300" />
+                      <span className="hidden sm:inline">Ganti Kamera</span>
+                    </button>
+
+                    {/* File Upload QR Fallback Button */}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 text-white border border-white/10 backdrop-blur-md transition-colors cursor-pointer"
+                      title="Pindai QR dari File / Galeri Foto"
+                    >
+                      <Upload className="w-3.5 h-3.5 text-emerald-300" />
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-300 mt-2.5 font-medium">
-                  {simulatedScanning
-                    ? 'Memverifikasi QR Code Unit Barang...'
-                    : 'Arahkan kamera ke stiker QR pada unit barang atau masukkan kode unit di bawah'}
-                </p>
+
+                {/* 3. Reticle / QR Target Box Overlay */}
+                {isCameraActive && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none p-4">
+                    <div className={`relative w-44 h-44 sm:w-52 sm:h-52 rounded-2xl border-2 transition-all ${
+                      isQrDetectedFlash 
+                        ? 'border-emerald-400 bg-emerald-500/20 scale-105' 
+                        : 'border-emerald-400/80 bg-emerald-500/5'
+                    }`}>
+                      {/* 4 Corner Markers */}
+                      <span className="absolute -top-1 -left-1 w-5 h-5 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg" />
+                      <span className="absolute -top-1 -right-1 w-5 h-5 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg" />
+                      <span className="absolute -bottom-1 -left-1 w-5 h-5 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg" />
+                      <span className="absolute -bottom-1 -right-1 w-5 h-5 border-b-4 border-r-4 border-emerald-400 rounded-br-lg" />
+
+                      {/* Sweeping Laser Line Animation */}
+                      {!isQrDetectedFlash && (
+                        <div className="absolute inset-x-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_8px_#34d399] animate-[bounce_2s_infinite]" />
+                      )}
+
+                      {/* Detection Confirmation Overlay */}
+                      {isQrDetectedFlash && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2 bg-emerald-950/80 rounded-2xl animate-in zoom-in-95">
+                          <Check className="w-10 h-10 text-emerald-400 animate-bounce" />
+                          <span className="text-xs font-extrabold text-white mt-1">QR Berhasil Terbaca!</span>
+                          <span className="text-[10px] font-mono text-emerald-300 truncate max-w-[150px]">
+                            {detectedQrCodeText}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-[11px] font-semibold text-slate-200 mt-3 drop-shadow bg-slate-950/70 px-3 py-1 rounded-full backdrop-blur-xs">
+                      Arahkan kamera ke stiker QR unit barang
+                    </p>
+                  </div>
+                )}
+
+                {/* 4. Fallback / Permission Error State */}
+                {!isCameraActive && (
+                  <div className="relative z-10 p-6 flex flex-col items-center justify-center text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-900/40 border border-blue-500/30 flex items-center justify-center text-blue-300">
+                      <Camera className="w-6 h-6 text-amber-300" />
+                    </div>
+
+                    {cameraError ? (
+                      <div className="max-w-xs space-y-1">
+                        <p className="text-xs font-bold text-rose-300 flex items-center justify-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Akses Kamera Membutuhkan Izin</span>
+                        </p>
+                        <p className="text-[11px] text-slate-300 leading-snug">
+                          {cameraError}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="max-w-xs space-y-1">
+                        <p className="text-xs font-bold text-slate-200">
+                          Kamera Siap Diaktifkan
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          Klik tombol di bawah untuk mendeteksi kamera HP atau laptop Anda secara otomatis.
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => startCamera()}
+                        className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Deteksi &amp; Aktifkan Kamera</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Upload Foto QR</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Manual QR Code Lookup */}

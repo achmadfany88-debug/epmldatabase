@@ -804,7 +804,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({
   onSelectBantuan,
   selectedKabupaten,
   onFilterKabupaten,
-  heightClass = 'h-[720px]',
+  heightClass = 'h-[440px] sm:h-[560px] lg:h-[700px]',
   showFilters = true,
   initialYear = 'ALL',
   initialQuarter = 'ALL',
@@ -3210,7 +3210,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({
 
             {/* FLOATING INSPECTION CARD (When clicking or hovering a working area) */}
             {inspectorData && !activeEditorOpen && (
-              <div className="absolute bottom-6 right-6 z-20 w-80 bg-white/95 backdrop-blur-md border border-slate-200 text-slate-800 rounded-2xl p-5 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-6 sm:bottom-6 sm:w-80 z-20 max-w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 rounded-2xl p-4 sm:p-5 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <div className="flex items-start justify-between pb-3 mb-3 border-b border-slate-100">
                   <div>
                     <div className="flex items-center gap-1.5 mb-1">
@@ -3269,13 +3269,6 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({
                       <span className="text-slate-500">Realisasi Bantuan:</span>
                       <span className="font-extrabold text-slate-900 tabular-nums">
                         Rp {inspectorData.stat.totalNominal.toLocaleString('id-ID')}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Alokasi Pagu KPw BI:</span>
-                      <span className="font-semibold text-slate-700 tabular-nums">
-                        Rp {inspectorData.alokasiPagu.toLocaleString('id-ID')}
                       </span>
                     </div>
 
@@ -3358,7 +3351,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({
 
             {/* FLOATING LEGEND & INFORMASI 13 WILAYAH KERJA WITH HIDE / UNHIDE FEATURE */}
             {showLegendInfo ? (
-              <div className="absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-md px-4 py-3 rounded-2xl border border-slate-200 text-xs shadow-md space-y-2 animate-in fade-in">
+              <div className="absolute top-3 left-3 sm:top-auto sm:bottom-6 sm:left-6 z-20 max-w-[calc(100%-24px)] sm:max-w-xs bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-slate-200 dark:border-slate-800 text-xs shadow-md space-y-2 animate-in fade-in">
                 <div className="flex items-center justify-between gap-3 pb-1.5 border-b border-slate-100">
                   <span className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">
                     Informasi Peta Wilayah Kerja
@@ -3410,7 +3403,7 @@ export const MapVisualization: React.FC<MapVisualizationProps> = ({
               /* UNHIDE BUTTON WHEN LEGEND IS HIDDEN */
               <button
                 onClick={() => setShowLegendInfo(true)}
-                className="absolute bottom-6 left-6 z-20 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-md hover:bg-slate-50 transition-all flex items-center gap-2 cursor-pointer"
+                className="absolute top-3 left-3 sm:top-auto sm:bottom-6 sm:left-6 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 shadow-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-2 cursor-pointer"
                 title="Tampilkan Kembali Informasi & Legenda"
               >
                 <Eye className="w-3.5 h-3.5 text-blue-900" />

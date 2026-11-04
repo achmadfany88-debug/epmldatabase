@@ -9,7 +9,6 @@ import {
   Search,
   Truck,
   CheckCircle2,
-  QrCode,
   ArrowLeft,
   ExternalLink,
   Clock,
@@ -26,9 +25,9 @@ import {
 interface TrackingSubPageProps {
   bantuanList: BantuanItem[];
   onBackToHome: () => void;
-  onSelectBantuan: (item: BantuanItem) => void;
-  onOpenQrScanner: () => void;
-  onOpenWhatsApp: (item: BantuanItem) => void;
+  onSelectBantuan?: (item: BantuanItem) => void;
+  onOpenQrScanner?: () => void;
+  onOpenWhatsApp?: (item: BantuanItem) => void;
 }
 
 const TAHAPAN_ORDER = [
@@ -43,8 +42,7 @@ const TAHAPAN_ORDER = [
 
 export const TrackingSubPage: React.FC<TrackingSubPageProps> = ({
   bantuanList,
-  onBackToHome,
-  onOpenQrScanner
+  onBackToHome
 }) => {
   const [inputKeyword, setInputKeyword] = useState('');
   const [submittedKeyword, setSubmittedKeyword] = useState('');
@@ -135,14 +133,6 @@ export const TrackingSubPage: React.FC<TrackingSubPageProps> = ({
               </span>
             </div>
           </div>
-
-          <button
-            onClick={onOpenQrScanner}
-            className="px-4 py-2 rounded-lg bg-[#002B66] hover:bg-blue-900 text-white text-xs font-bold flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
-          >
-            <QrCode className="w-4 h-4 text-amber-300" />
-            <span>Pindai QR Serah Terima Lapangan</span>
-          </button>
         </div>
 
         {/* Hero Resi / Logistics Search Box */}

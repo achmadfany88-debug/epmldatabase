@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { ArtikelItem, BantuanItem, LandingPageConfig } from '../types';
+import { ArtikelItem, BantuanItem, JadwalSurveiMonitoringItem, LandingPageConfig } from '../types';
 import { MapVisualization } from './map/MapVisualization';
 import { EPML_ARTIKEL } from '../data/initialData';
 import { ImageLightboxModal } from './common/ImageLightboxModal';
+import { KalenderSurveiMonitoring } from './admin/KalenderSurveiMonitoring';
 import { 
   CheckCircle2, 
   MapPin, 
@@ -31,18 +32,22 @@ interface LandingPageProps {
   bantuanList: BantuanItem[];
   landingConfig: LandingPageConfig;
   artikelList?: ArtikelItem[];
+  jadwalKalender?: JadwalSurveiMonitoringItem[];
   onOpenLogin: () => void;
   onSelectBantuan: (item: BantuanItem) => void;
   onOpenQrScanner?: () => void;
   onNavigateToTracking?: () => void;
+  onOpenKalenderPage?: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   bantuanList,
   landingConfig,
   artikelList,
+  jadwalKalender = [],
   onOpenLogin,
-  onSelectBantuan
+  onSelectBantuan,
+  onOpenKalenderPage
 }) => {
   // KPI Filter State (Tahunan & Triwulanan)
   const [selectedYear, setSelectedYear] = useState<string>('ALL');
@@ -76,11 +81,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   const persentaseSelesai = totalPenerima > 0 ? Math.round((selesaiDiterima / totalPenerima) * 100) : 0;
 
-  // Active articles for dashboard display (only show items configured to display on dashboard, or fallback)
+  // Active articles for dashboard display (do NOT fallback to EPML_ARTIKEL when articles are deleted in Edit Artikel & Berita)
   const articlesSource = useMemo(() => {
-    if (artikelList && artikelList.length > 0) {
-      const active = artikelList.filter(a => a.tampilkanDiBeranda !== false && a.statusPublikasi !== 'Draft');
-      return active.length > 0 ? active : artikelList;
+    if (artikelList !== undefined) {
+      return artikelList.filter(a => a.tampilkanDiBeranda !== false && a.statusPublikasi !== 'Draft');
     }
     return EPML_ARTIKEL;
   }, [artikelList]);
@@ -175,7 +179,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         id="hero" 
         onMouseEnter={() => setIsHeroHovered(true)}
         onMouseLeave={() => setIsHeroHovered(false)}
-        className="relative min-h-[520px] lg:min-h-[580px] flex items-center overflow-hidden group select-none"
+        className="relative min-h-[460px] sm:min-h-[520px] lg:min-h-[580px] flex items-center overflow-hidden group select-none"
       >
         {/* Dynamic Background Media Layer */}
         <div className="absolute inset-0 z-0 bg-slate-950">
@@ -242,7 +246,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Title */}
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight text-balance leading-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold text-white tracking-tight text-balance leading-tight">
               {landingConfig.heroTitle || 'Sistem Data Terpadu EPML Provinsi Jawa Timur'}
             </h1>
 
@@ -268,7 +272,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {landingConfig.heroMediaMode !== 'video' && heroSlides.length > 1 && (
           <>
             {/* Dot indicators at bottom right */}
-            <div className="absolute bottom-6 right-6 lg:right-10 z-20 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 shadow-lg">
+            <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 lg:right-10 z-20 flex items-center gap-1.5 sm:gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-full border border-white/10 shadow-lg">
               {heroSlides.map((slide, dotIdx) => {
                 const isSelected = dotIdx === (heroSlideIndex % heroSlides.length);
                 return (
@@ -310,7 +314,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         {/* Single Video Badge (Only in video mode) */}
         {landingConfig.heroMediaMode === 'video' && (
-          <div className="absolute bottom-6 right-6 lg:right-10 z-20 flex items-center gap-2 bg-black/50 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/10 text-[10px] text-emerald-300 font-mono shadow-lg">
+          <div className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 lg:right-10 z-20 flex items-center gap-2 bg-black/50 backdrop-blur-md px-3 sm:px-3.5 py-1.5 rounded-full border border-white/10 text-[10px] text-emerald-300 font-mono shadow-lg">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
             <span>FHD • Looping Video Aktif</span>
           </div>
@@ -526,128 +530,148 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Carousel navigation controls */}
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-xs">
+          {totalArticles > 0 && (
+            <div className="flex items-center gap-3">
+              {/* Carousel navigation controls */}
+              <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-xs">
+                <button
+                  onClick={handlePrevSlide}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Berita Sebelumnya"
+                  aria-label="Previous News"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 px-2 tabular-nums">
+                  {(currentSlide % totalArticles) + 1} / {totalArticles}
+                </span>
+                <button
+                  onClick={handleNextSlide}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Berita Selanjutnya (Loop ke Berita 1)"
+                  aria-label="Next News"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Tombol Lihat Berita Lainnya */}
               <button
-                onClick={handlePrevSlide}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Berita Sebelumnya"
-                aria-label="Previous News"
+                onClick={() => setIsAllNewsModalOpen(true)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200/60 dark:border-blue-800 transition-colors flex items-center gap-1.5"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 px-2 tabular-nums">
-                {currentSlide + 1} / {totalArticles}
-              </span>
-              <button
-                onClick={handleNextSlide}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Berita Selanjutnya (Loop ke Berita 1)"
-                aria-label="Next News"
-              >
-                <ChevronRight className="w-4 h-4" />
+                <span>Lihat Berita Lainnya</span>
+                <ExternalLink className="w-3.5 h-3.5" />
               </button>
             </div>
-
-            {/* Tombol Lihat Berita Lainnya */}
-            <button
-              onClick={() => setIsAllNewsModalOpen(true)}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-blue-900 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200/60 dark:border-blue-800 transition-colors flex items-center gap-1.5"
-            >
-              <span>Lihat Berita Lainnya</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* Carousel Container */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {visibleArticles.map(({ item: art, index }) => (
-            <div
-              key={`${art.id}-${index}`}
-              onClick={() => setSelectedArticleDetail(art)}
-              className="group bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer"
-            >
-              <div>
-                <div className="h-44 w-full overflow-hidden bg-slate-200 dark:bg-slate-800 relative group/img">
-                  <img
-                    src={art.gambar}
-                    alt={art.judul}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute top-3 left-3 bg-blue-900/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-md backdrop-blur-xs shadow-xs">
-                    Berita #{index + 1}
+        {/* Empty State or Carousel Container */}
+        {totalArticles === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 p-12 text-center space-y-3 shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 flex items-center justify-center mx-auto">
+              <FileText className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+              Belum ada publikasi artikel & berita
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Saat ini belum ada artikel atau berita yang dipublikasikan. Silakan tambahkan publikasi baru melalui menu Edit Artikel & Berita pada Portal Admin.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {visibleArticles.map(({ item: art, index }) => (
+                <div
+                  key={`${art.id}-${index}`}
+                  onClick={() => setSelectedArticleDetail(art)}
+                  className={`group bg-white dark:bg-slate-900 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition-all flex flex-col justify-between cursor-pointer ${
+                    index === 1 ? 'hidden sm:flex' : ''
+                  } ${index === 2 ? 'hidden lg:flex' : ''}`}
+                >
+                  <div>
+                    <div className="h-44 w-full overflow-hidden bg-slate-200 dark:bg-slate-800 relative group/img">
+                      <img
+                        src={art.gambar}
+                        alt={art.judul}
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      <div className="absolute top-3 left-3 bg-blue-900/90 text-white text-[10px] font-bold px-2.5 py-1 rounded-md backdrop-blur-xs shadow-xs">
+                        Berita #{index + 1}
+                      </div>
+                      {/* Klik Perbesar Foto Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLightboxData({
+                            isOpen: true,
+                            imageUrl: art.gambar,
+                            title: art.judul,
+                            category: art.kategori,
+                            date: art.tanggal,
+                            location: art.kabupaten,
+                            caption: art.ringkasan
+                          });
+                        }}
+                        className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/75 hover:bg-black text-white text-[10px] font-medium flex items-center gap-1 backdrop-blur-xs transition-opacity opacity-90 hover:opacity-100 cursor-pointer shadow-xs"
+                        title="Klik untuk Memperbesar Foto"
+                      >
+                        <ZoomIn className="w-3 h-3 text-amber-300" />
+                        <span>Perbesar Foto</span>
+                      </button>
+                    </div>
+                    <div className="p-5">
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
+                        <span className="font-bold text-blue-900 dark:text-blue-400">{art.kategori}</span>
+                        <span aria-hidden="true">&middot;</span>
+                        <span>{art.tanggal}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2 leading-snug group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">
+                        {art.judul}
+                      </h3>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-3 leading-relaxed">
+                        {art.ringkasan}
+                      </p>
+                    </div>
                   </div>
-                  {/* Klik Perbesar Foto Button */}
+
+                  <div className="px-5 pb-5 pt-3 flex items-center justify-between text-xs text-blue-900 dark:text-blue-400 font-semibold border-t border-slate-100 dark:border-slate-800/80">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
+                      {art.kabupaten}
+                    </span>
+                    <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                      Baca Selengkapnya
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Carousel Progress Dots */}
+            {articlesSource.length > 1 && (
+              <div className="mt-8 flex items-center justify-center gap-1.5 flex-wrap">
+                {articlesSource.map((_, idx) => (
                   <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setLightboxData({
-                        isOpen: true,
-                        imageUrl: art.gambar,
-                        title: art.judul,
-                        category: art.kategori,
-                        date: art.tanggal,
-                        location: art.kabupaten,
-                        caption: art.ringkasan
-                      });
-                    }}
-                    className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/75 hover:bg-black text-white text-[10px] font-medium flex items-center gap-1 backdrop-blur-xs transition-opacity opacity-90 hover:opacity-100 cursor-pointer shadow-xs"
-                    title="Klik untuk Memperbesar Foto"
-                  >
-                    <ZoomIn className="w-3 h-3 text-amber-300" />
-                    <span>Perbesar Foto</span>
-                  </button>
-                </div>
-                <div className="p-5">
-                  <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
-                    <span className="font-bold text-blue-900 dark:text-blue-400">{art.kategori}</span>
-                    <span aria-hidden="true">&middot;</span>
-                    <span>{art.tanggal}</span>
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 line-clamp-2 mb-2 leading-snug group-hover:text-blue-800 dark:group-hover:text-blue-400 transition-colors">
-                    {art.judul}
-                  </h3>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-3 leading-relaxed">
-                    {art.ringkasan}
-                  </p>
-                </div>
+                    key={idx}
+                    onClick={() => setCurrentSlide(idx)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      idx === (currentSlide % totalArticles)
+                        ? 'w-7 bg-blue-900 dark:bg-blue-400' 
+                        : 'w-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300'
+                    }`}
+                    aria-label={`Go to slide ${idx + 1}`}
+                    title={`Berita ${idx + 1}`}
+                  />
+                ))}
               </div>
-
-              <div className="px-5 pb-5 pt-3 flex items-center justify-between text-xs text-blue-900 dark:text-blue-400 font-semibold border-t border-slate-100 dark:border-slate-800/80">
-                <span className="text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1">
-                  <MapPin className="w-3.5 h-3.5 text-blue-800 dark:text-blue-400" />
-                  {art.kabupaten}
-                </span>
-                <span className="flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                  Baca Selengkapnya
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Carousel Progress Dots */}
-        {articlesSource.length > 1 && (
-          <div className="mt-8 flex items-center justify-center gap-1.5 flex-wrap">
-            {articlesSource.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentSlide(idx)}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  idx === currentSlide 
-                    ? 'w-7 bg-blue-900 dark:bg-blue-400' 
-                    : 'w-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300'
-                }`}
-                aria-label={`Go to slide ${idx + 1}`}
-                title={`Berita ${idx + 1}`}
-              />
-            ))}
-          </div>
+            )}
+          </>
         )}
       </section>
 
